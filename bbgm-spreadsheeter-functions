@@ -1,0 +1,126 @@
+import json  # this is used for reading from the bgma json to a python dict
+import csv  # this is used for writing from a list to a csv
+from collections import defaultdict  # this is used because i hate keyerrors
+
+
+def file_loader(filepath):
+    with open(filepath, encoding="utf-8") as bbgm_file:
+        return json.load(bbgm_file)
+
+
+def teams_loader(masterfile):  # creates dictionary mapping tids to team abbrevs
+    id_dictionary = {}
+    for id_index in range(len(masterfile["teams"])):
+        id_dictionary[id_index] = masterfile["teams"][id_index]["abbrev"]
+    return id_dictionary  # returns a dictionary of form {tid: team abbrev}
+
+
+def all_players_loader(masterfile):  # returns a list containing player data dictionaries
+    return masterfile["players"]
+
+
+def player_ends_season_generator(player_data,
+                                 tid_dictionary):  # creates a dictionary with entries of type {year:teamendedseasonwith}
+    season_ends = defaultdict(lambda: 'NOTEAM')
+    for season_year in range(player_data["draft"]["year"], player_data["ratings"][-1]["season"] + 1):
+        for stats_index in range(len(player_data["stats"])):
+            if int(player_data["stats"][stats_index]["season"]) == int(season_year):
+                while player_data["stats"][stats_index]["season"] == int(season_year):
+                    stats_index += 1
+                    if stats_index == len(player_data["stats"]):
+                        break
+                season_ends[season_year] = tid_dictionary[player_data["stats"][stats_index - 1]["tid"]]
+                break
+    return season_ends  # returns a dictionary of form {year1:team abbrev}, year2:t2..etc} for a single player
+
+
+# takes a single player's data & the tid dictionary, generates the player's bio, ratings csv lines
+def player_proglist_generator(player_data, tid_dictionary):
+    player_proglist = []
+
+    player_teams = player_ends_season_generator(player_data, tid_dictionary)
+    for season_id in range(len(player_data[
+                                   "ratings"])):  # the length of player_data["ratings"] is equal to the amount of lines in a player's "ratings" section in bggm
+        season_ratings = []
+        for bio_column in ["firstName", "lastName", "pid"]:
+            season_ratings.append(player_data[bio_column])
+        season_ratings.append(
+            player_data["ratings"][season_id]["season"] - player_data["born"]["year"])  # appends player age
+        season_ratings.append(player_data["ratings"][season_id]["season"])  # appends the year
+        season_ratings.append(
+            player_teams[player_data["ratings"][season_id]["season"]])  # appends the team at end of year
+        for column in ["ovr", "hgt", "stre", "spd", "jmp", "endu", "ins", "dnk", "ft", "fg", "tp", "oiq", "diq", "drb",
+                       "pss", "reb"]:
+            season_ratings.append(player_data["ratings"][season_id][column])
+        player_proglist.append(season_ratings.copy())
+    return player_proglist
+
+
+# creates flattened (season total) stats for a player, taking fields from field_list input
+# (all sheets will contain pid, team, season, gp and total mp)
+
+def player_stats_generator(player_data, tid_dictionary, average_field_list, additive_field_list):
+    return_additive_field_list = ["gp", "min"]
+    return_additive_field_list.extend(additive_field_list)
+    full_seasonlines = defaultdict(lambda: [player_data["pid"]])
+    player_teams = player_ends_season_generator(player_data, tid_dictionary)
+    for season in player_teams.keys():
+        full_seasonlines[season].append(player_teams[season])
+        full_seasonlines[season].append(season)
+
+    def additive_stat_generator(stat):
+        seasonlines = defaultdict(lambda: [0])
+        for statline in player_data["stats"]:
+            if not statline["playoffs"]:
+                # this is hardcoded to exclude playoffs;
+                # playoff sim math differs too much to include
+                season = statline["season"]
+                seasonlines[season][0] = seasonlines[season][0] + statline[stat]
+        return seasonlines
+
+    def average_stat_generator(stat):
+        seasonlines = defaultdict(lambda: [0, 0])
+        for statline in player_data["stats"]:
+            if not statline["playoffs"]:
+                season = statline["season"]
+                season_minutes = seasonlines[season][0]
+                minutes = statline["min"]
+                seasonlines[season][0] = season_minutes + minutes
+                if minutes + season_minutes != 0:
+                    seasonlines[season][1] = (seasonlines[season][1] * season_minutes + statline[stat] * minutes) / (
+                                minutes + season_minutes)
+        return seasonlines
+
+    for field in return_additive_field_list:
+        single_stat_seasonline = additive_stat_generator(field)
+        for season in single_stat_seasonline.keys():
+            full_seasonlines[season].append(round(single_stat_seasonline[season][0]))
+    for field in average_field_list:
+        single_stat_seasonline = average_stat_generator(field)
+        for season in single_stat_seasonline.keys():
+            full_seasonlines[season].append(round(single_stat_seasonline[season][1], 2))
+    return full_seasonlines.values()
+
+
+def players_stats_generator(players_data, tid_dictionary, average_field_list, additive_field_list):
+    all_players_careerlines = [["pid", "team", "season", "gp", "min"] + additive_field_list + average_field_list]
+    for player_data in players_data:
+        all_players_careerlines.extend(
+            player_stats_generator(player_data, tid_dictionary, average_field_list, additive_field_list))
+    return all_players_careerlines
+
+
+def all_players_proglist_generator(players_data, tid_dictionary):
+    fields = [
+        ["fname", "lname", "pid", "age", "season", "team", "ovr", "hgt", "str", "spe", "jmp", "end", "ins", "dnk", "ft",
+         "2pt", "3pt", "oiq", "diq", "drb", "pss", "reb"]]
+    all_players_proglist = fields.copy()
+    for player in players_data:
+        all_players_proglist.extend(player_proglist_generator(player, tid_dictionary).copy())
+    return all_players_proglist
+
+
+def list_to_csv(all_players_proglist, output_file):
+    with open(output_file, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerows(all_players_proglist)
