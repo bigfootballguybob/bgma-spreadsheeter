@@ -122,3 +122,8 @@ def list_to_csv(all_players_proglist, output_file):
     with open(output_file, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerows(all_players_proglist)
+        
+def delta_column_adder(sheetname,columnlist):
+    for column in columnlist:
+        sheetname[column+'_dif']=sheetname.groupby(['pid'])[column].diff()
+
