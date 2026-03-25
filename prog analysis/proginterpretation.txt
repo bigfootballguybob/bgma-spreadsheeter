@@ -1,0 +1,3 @@
+notice the bimodal distribution of progs for young players, shifting towards a normal distribution as they get older. peak is reached at -1, suggesting that the most common prog is actually negative.
+
+note that sample sizes decrease drastically after age 25 as that is the minimum retirement age in bgma 
