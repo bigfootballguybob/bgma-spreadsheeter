@@ -1,7 +1,7 @@
 import json  # this is used for reading from the bgma json to a python dict
 import csv  # this is used for writing from a list to a csv
 from collections import defaultdict  # this is used because i hate keyerrors
-
+ratings = ["ovr", "hgt", "stre", "spd", "jmp", "endu", "ins", "dnk", "ft", "fg", "tp", "oiq", "diq", "drb","pss", "reb"]
 
 def file_loader(filepath):
     with open(filepath, encoding="utf-8") as bbgm_file:
@@ -49,8 +49,7 @@ def player_proglist_generator(player_data, tid_dictionary):
         season_ratings.append(player_data["ratings"][season_id]["season"])  # appends the year
         season_ratings.append(
             player_teams[player_data["ratings"][season_id]["season"]])  # appends the team at end of year
-        for column in ["ovr", "hgt", "stre", "spd", "jmp", "endu", "ins", "dnk", "ft", "fg", "tp", "oiq", "diq", "drb",
-                       "pss", "reb"]:
+        for column in ratings:
             season_ratings.append(player_data["ratings"][season_id][column])
         player_proglist.append(season_ratings.copy())
     return player_proglist
@@ -60,6 +59,7 @@ def player_proglist_generator(player_data, tid_dictionary):
 # (all sheets will contain pid, team, season, gp and total mp)
 
 def player_stats_generator(player_data, tid_dictionary, average_field_list, additive_field_list):
+    #to add try/except in case of missing key, e.g. for missing season stats in old seasons
     return_additive_field_list = ["gp", "min"]
     return_additive_field_list.extend(additive_field_list)
     full_seasonlines = defaultdict(lambda: [player_data["pid"]])
@@ -111,9 +111,7 @@ def players_stats_generator(players_data, tid_dictionary, average_field_list, ad
 
 
 def all_players_proglist_generator(players_data, tid_dictionary):
-    fields = [
-        ["fname", "lname", "pid", "age", "season", "team", "ovr", "hgt", "str", "spe", "jmp", "end", "ins", "dnk", "ft",
-         "2pt", "3pt", "oiq", "diq", "drb", "pss", "reb"]]
+    fields = [["fname", "lname", "pid", "age", "season", "team"]+ratings]
     all_players_proglist = fields.copy()
     for player in players_data:
         all_players_proglist.extend(player_proglist_generator(player, tid_dictionary).copy())
